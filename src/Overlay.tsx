@@ -352,7 +352,7 @@ const Overlay = () => {
     // Check if point is within button bounds (with curve)
     const isInButtonBounds = (canvasX: number, canvasY: number) => {
       const buttonStartX = 160;
-      const buttonStartY = 160; 
+      const buttonStartY = 170; 
       const buttonWidth = 185;
       const buttonHeight = 50;
       
