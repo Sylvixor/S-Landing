@@ -11,8 +11,42 @@ const Overlay = () => {
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    
+    // Calculate 16:9 dimensions that fit in the current viewport
+    const calculateDimensions = () => {
+      const windowAspect = window.innerWidth / window.innerHeight;
+      const targetAspect = 16 / 9;
+      
+      let width, height;
+      if (windowAspect > targetAspect) {
+        // Window is wider than 16:9, fit to height
+        height = window.innerHeight;
+        width = height * targetAspect;
+      } else {
+        // Window is taller than 16:9, fit to width
+        width = window.innerWidth;
+        height = width / targetAspect;
+      }
+      
+      return { width, height };
+    };
+
+    let { width: renderWidth, height: renderHeight } = calculateDimensions();
+    renderer.setSize(renderWidth, renderHeight);
     containerRef.current.appendChild(renderer.domElement);
+
+    // Center the canvas
+    const updateCanvasPosition = () => {
+      const canvas = renderer.domElement;
+      const { width, height } = calculateDimensions();
+      canvas.style.position = 'absolute';
+      canvas.style.left = '50%';
+      canvas.style.top = '50%';
+      canvas.style.transform = 'translate(-50%, -50%)';
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+    };
+    updateCanvasPosition();
 
     const video = document.createElement("video");
     video.src = "/BG.mp4";
@@ -30,7 +64,7 @@ const Overlay = () => {
     videoTexture.magFilter = THREE.LinearFilter;
     videoTexture.generateMipmaps = false;
 
-    const createCombinedCanvasTexture = (isHovered: boolean = false): THREE.CanvasTexture => {
+    const createCombinedCanvasTexture = (isHovered: boolean = false, hoverProgress: number = 0): THREE.CanvasTexture => {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
       if (!ctx) return new THREE.CanvasTexture(canvas);
@@ -69,7 +103,6 @@ const Overlay = () => {
       const buttonX = 75;
       const buttonY = 120;
 
-      ctx.fillStyle = "rgba(100, 100, 120, 0.4)";
       const paddingX = 16;
       const paddingY = 6;
       const btnWidth = ctx.measureText(buttonText).width + paddingX * 2;
@@ -78,10 +111,11 @@ const Overlay = () => {
       const btnY = buttonY - paddingY / 2;
       const radius = 6;
 
-      // Draw button background
-      ctx.fillStyle = "rgba(100, 100, 120, 0.4)";
-      ctx.shadowColor = "rgba(0,0,0,0.85)";
-      ctx.shadowBlur = 4;
+      // Button background with fill animation
+      const fillAlpha = 0.2 + (0.8 * hoverProgress); // Fill more when hovered
+      
+      // Draw button background (fills up on hover)
+      ctx.fillStyle = `rgba(100, 100, 120, ${fillAlpha})`;
       ctx.beginPath();
       ctx.moveTo(btnX + radius, btnY);
       ctx.lineTo(btnX + btnWidth - radius, btnY);
@@ -95,26 +129,52 @@ const Overlay = () => {
       ctx.closePath();
       ctx.fill();
 
-      // Slim white border
-      ctx.shadowBlur = 0;
+      // Button border (always visible)
       ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Button text
-      ctx.shadowBlur = 6;
-      ctx.strokeStyle = "black";
-      ctx.fillStyle = isHovered ? "rgba(255, 255, 150, 1.0)" : "white"; // Brighter when hovered
-      ctx.strokeText(buttonText, buttonX, buttonY);
+      // Button text with conditional shadow/stroke and inversion animation
+      // Remove shadow and stroke when hovering (when hoverProgress > 0.1)
+      if (hoverProgress < 0.1) {
+        ctx.shadowColor = "rgba(0,0,0,0.85)";
+        ctx.shadowBlur = 6;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "black";
+      } else {
+        // Clear shadow and stroke for hovered state
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = 0;
+      }
+      
+      // Invert text color based on hover progress
+      // Normal: white text, Hover: black text (inverted)
+      const textR = 255 - (255 * hoverProgress);
+      const textG = 255 - (255 * hoverProgress);
+      const textB = 255 - (255 * hoverProgress);
+      
+      ctx.fillStyle = `rgb(${textR}, ${textG}, ${textB})`;
+      
+      // Only apply stroke if not hovered
+      if (hoverProgress < 0.1) {
+        ctx.strokeText(buttonText, buttonX, buttonY);
+      }
       ctx.fillText(buttonText, buttonX, buttonY);
 
-      // Credit text
+      // Credit text (restore shadow/stroke for credit text)
       ctx.font = "bold 45px 'Courier New', Courier, monospace";
+      ctx.shadowColor = "rgba(0,0,0,0.85)";
+      ctx.shadowBlur = 6;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "black";
+      
       const creditText = "@sylvixor";
       const creditWidth = ctx.measureText(creditText).width;
       const creditX = canvas.width - creditWidth - 60;
       const creditY = canvas.height - 85;
     
+      ctx.fillStyle = "white";
       ctx.strokeText(creditText, creditX, creditY);
       ctx.fillText(creditText, creditX, creditY);
 
@@ -129,6 +189,8 @@ const Overlay = () => {
 
     let combinedTexture: THREE.CanvasTexture = createCombinedCanvasTexture();
     let isHovered = false;
+    let hoverProgress = 0;
+    let targetHoverProgress = 0;
 
     const geometry = new THREE.PlaneGeometry(2, 2);
 
@@ -136,10 +198,10 @@ const Overlay = () => {
       uniforms: {
         u_texture: { value: videoTexture },
         u_combinedTexture: { value: combinedTexture },
-        u_aspect: { value: window.innerWidth / window.innerHeight },
+        u_aspect: { value: 16 / 9 }, // Always 16:9
         u_distortionAmount: { value: 0.06 },
         u_time: { value: 0 },
-        u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+        u_resolution: { value: new THREE.Vector2(renderWidth, renderHeight) },
         u_bloom: { value: 0.8 },
       },
       vertexShader: `
@@ -220,7 +282,7 @@ const Overlay = () => {
           // Draw the combined text+button texture with glitch effect
           vec2 textUV = finalUV;
 
-          float glitchXOffset = (noise2d(vec2(textUV.y * 100.0, u_time * 35.0)) - 0.5) * 0.003;
+          float glitchXOffset = (noise2d(vec2(textUV.y * 100.0, u_time * 35.0)) - 0.5) * 0.002;
           float glitchYOffset = (noise2d(vec2(textUV.x * 100.0 + 1000.0, u_time * 25.0)) - 0.5) * 0.002;
           vec2 glitchOffset = vec2(glitchXOffset, glitchYOffset);
           vec2 glitchUV = (textUV + glitchOffset);
@@ -256,163 +318,120 @@ const Overlay = () => {
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
 
-    // Store button dimensions for click detection (now using canvas coordinates directly)
-    const buttonBounds = {
-      x: 160,
-      y: 160, 
-      width: 185,
-      height: 50
-    };
-
     // Handle resizing
     const onResize = () => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
+      const { width, height } = calculateDimensions();
+      renderWidth = width;
+      renderHeight = height;
       renderer.setSize(width, height);
-      material.uniforms.u_aspect.value = width / height;
       material.uniforms.u_resolution.value.set(width, height);
-      material.uniforms.u_combinedTexture.value = createCombinedCanvasTexture();
-      material.uniforms.u_combinedTexture.value.needsUpdate = true;
+      updateCanvasPosition();
     };
     window.addEventListener("resize", onResize);
 
-    // Function to apply inverse fisheye distortion to click coordinates
-    const undistortCoordinates = (x: number, y: number) => {
-      const aspect = window.innerWidth / window.innerHeight;
-      const distortionAmount = 0.06;
+    // Convert screen coordinates to canvas coordinates accounting for 16:9 aspect ratio
+    const screenToCanvasCoords = (screenX: number, screenY: number) => {
+      const canvas = renderer.domElement;
+      const rect = canvas.getBoundingClientRect();
       
-      // Convert screen coordinates to normalized UV (-1 to 1)
-      let uv = {
-        x: (x / window.innerWidth) * 2 - 1,
-        y: (y / window.innerHeight) * 2 - 1
-      };
-      uv.x *= aspect;
+      // Get coordinates relative to the canvas
+      const canvasX = screenX - rect.left;
+      const canvasY = screenY - rect.top;
       
-      // Apply inverse barrel distortion
-      const r = Math.sqrt(uv.x * uv.x + uv.y * uv.y);
-      if (r > 0) {
-        const distortedR = r + distortionAmount * Math.pow(r, 3);
-        const scale = r / distortedR;
-        uv.x *= scale;
-        uv.y *= scale;
-      }
+      // Convert to normalized coordinates (0 to 1)
+      const normalizedX = canvasX / rect.width;
+      const normalizedY = canvasY / rect.height;
       
-      // Convert back to screen coordinates
-      uv.x /= aspect;
-      const screenX = (uv.x * 0.5 + 0.5) * window.innerWidth;
-      const screenY = (uv.y * 0.5 + 0.5) * window.innerHeight;
+      // Convert to texture coordinates (1920 x 1080)
+      const textureX = normalizedX * 1920;
+      const textureY = normalizedY * 1080;
       
-      return { x: screenX, y: screenY };
+      return { x: textureX, y: textureY };
     };
 
-    // Enhanced click handler for homebrew button with curved detection
-    const handleClick = (event: MouseEvent) => {
-      const rect = renderer.domElement.getBoundingClientRect();
-      const clickX = event.clientX - rect.left;
-      const clickY = event.clientY - rect.top;
-      
-      // Convert to normalized coordinates
-      const normalizedX = clickX / window.innerWidth;
-      const normalizedY = clickY / window.innerHeight;
-      
-      // Convert to canvas coordinates
-      const canvasX = normalizedX * 1920;
-      const canvasY = normalizedY * 1080;
-      
-      // Button parameters (your working values)
+    // Check if point is within button bounds (with curve)
+    const isInButtonBounds = (canvasX: number, canvasY: number) => {
       const buttonStartX = 160;
       const buttonStartY = 160; 
       const buttonWidth = 185;
       const buttonHeight = 50;
       
-      // Check if click is within the button's horizontal bounds
       if (canvasX >= buttonStartX && canvasX <= buttonStartX + buttonWidth) {
-        // Calculate the expected Y position at this X due to fisheye distortion
-        // The button curves upward from left to right
-        const progressAcrossButton = (canvasX - buttonStartX) / buttonWidth; // 0 to 1
-        
-        // Approximate the upward curve - adjust this curve factor to match your visual button
-        const curveFactor = -15; // negative because Y increases downward in screen coords
-        const curvedY = buttonStartY + (curveFactor * progressAcrossButton);
-        
-        // Check if click Y is within the curved button bounds
-        if (canvasY >= curvedY && canvasY <= curvedY + buttonHeight) {
-          console.log('Curved button clicked!'); // Debug log
-          window.open('https://homebrew.sylvixor.com', '_blank');
-        }
-      }
-    };
-
-    // Add hover effect with curved detection
-    const handleMouseMove = (event: MouseEvent) => {
-      const rect = renderer.domElement.getBoundingClientRect();
-      const mouseX = event.clientX - rect.left;
-      const mouseY = event.clientY - rect.top;
-      
-      // Convert to normalized coordinates
-      const normalizedX = mouseX / window.innerWidth;
-      const normalizedY = mouseY / window.innerHeight;
-      
-      // Convert to canvas coordinates
-      const canvasX = normalizedX * 1920;
-      const canvasY = normalizedY * 1080;
-      
-      // Button parameters
-      const buttonStartX = 160;
-      const buttonStartY = 160; 
-      const buttonWidth = 185;
-      const buttonHeight = 50;
-      
-      // Check if mouse is within the button's horizontal bounds
-      if (canvasX >= buttonStartX && canvasX <= buttonStartX + buttonWidth) {
-        // Calculate the expected Y position at this X due to fisheye distortion
         const progressAcrossButton = (canvasX - buttonStartX) / buttonWidth;
-        const curveFactor = -15; // Same curve as click detection
+        const curveFactor = -15;
         const curvedY = buttonStartY + (curveFactor * progressAcrossButton);
         
-        // Check if mouse Y is within the curved button bounds
-        if (canvasY >= curvedY && canvasY <= curvedY + buttonHeight) {
-          if (!isHovered) {
-            isHovered = true;
-            // Update texture with hover state
-            combinedTexture.dispose();
-            combinedTexture = createCombinedCanvasTexture(true);
-            material.uniforms.u_combinedTexture.value = combinedTexture;
-            material.uniforms.u_combinedTexture.value.needsUpdate = true;
-          }
-          renderer.domElement.style.cursor = 'pointer';
-        } else {
-          if (isHovered) {
-            isHovered = false;
-            // Update texture without hover state
-            combinedTexture.dispose();
-            combinedTexture = createCombinedCanvasTexture(false);
-            material.uniforms.u_combinedTexture.value = combinedTexture;
-            material.uniforms.u_combinedTexture.value.needsUpdate = true;
-          }
-          renderer.domElement.style.cursor = 'default';
-        }
-      } else {
-        if (isHovered) {
-          isHovered = false;
-          // Update texture without hover state
-          combinedTexture.dispose();
-          combinedTexture = createCombinedCanvasTexture(false);
-          material.uniforms.u_combinedTexture.value = combinedTexture;
-          material.uniforms.u_combinedTexture.value.needsUpdate = true;
-        }
-        renderer.domElement.style.cursor = 'default';
+        return canvasY >= curvedY && canvasY <= curvedY + buttonHeight;
+      }
+      return false;
+    };
+
+    // Enhanced click handler with better Opera GX compatibility
+    const handleClick = (event: MouseEvent) => {
+      // Prevent event bubbling and default behavior
+      event.preventDefault();
+      event.stopPropagation();
+      
+      const { x: canvasX, y: canvasY } = screenToCanvasCoords(event.clientX, event.clientY);
+      
+      if (isInButtonBounds(canvasX, canvasY)) {
+        console.log('Button clicked!', { canvasX, canvasY });
+        // Use a more compatible method for opening links
+        const link = document.createElement('a');
+        link.href = 'https://homebrew.sylvixor.com';
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
       }
     };
 
-    renderer.domElement.addEventListener('click', handleClick);
-    renderer.domElement.addEventListener('mousemove', handleMouseMove);
+    // Mouse move handler for hover effects
+    const handleMouseMove = (event: MouseEvent) => {
+      const { x: canvasX, y: canvasY } = screenToCanvasCoords(event.clientX, event.clientY);
+      const inBounds = isInButtonBounds(canvasX, canvasY);
+      
+      if (inBounds !== isHovered) {
+        isHovered = inBounds;
+        targetHoverProgress = isHovered ? 1 : 0;
+        renderer.domElement.style.cursor = isHovered ? 'pointer' : 'default';
+      }
+    };
+
+    // Add multiple event listeners for better Opera GX compatibility
+    const canvas = renderer.domElement;
+    canvas.addEventListener('click', handleClick, { passive: false });
+    canvas.addEventListener('mousedown', (e) => {
+      const { x: canvasX, y: canvasY } = screenToCanvasCoords(e.clientX, e.clientY);
+      if (isInButtonBounds(canvasX, canvasY)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, { passive: false });
+    canvas.addEventListener('mouseup', handleClick, { passive: false });
+    canvas.addEventListener('mousemove', handleMouseMove);
 
     let frameId: number;
+    let lastTime = 0;
 
     const animate = (time: number) => {
-      material.uniforms.u_time.value = time * 0.001;
+      const deltaTime = time - lastTime;
+      lastTime = time;
 
+      // Smooth hover animation
+      const lerpSpeed = 0.1;
+      hoverProgress += (targetHoverProgress - hoverProgress) * lerpSpeed;
+      
+      // Update texture if hover progress changed significantly
+      if (Math.abs(hoverProgress - (isHovered ? 1 : 0)) > 0.01) {
+        combinedTexture.dispose();
+        combinedTexture = createCombinedCanvasTexture(isHovered, hoverProgress);
+        material.uniforms.u_combinedTexture.value = combinedTexture;
+        material.uniforms.u_combinedTexture.value.needsUpdate = true;
+      }
+
+      material.uniforms.u_time.value = time * 0.001;
       renderer.render(scene, camera);
       frameId = requestAnimationFrame(animate);
     };
@@ -421,8 +440,10 @@ const Overlay = () => {
 
     return () => {
       window.removeEventListener("resize", onResize);
-      renderer.domElement.removeEventListener('click', handleClick);
-      renderer.domElement.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('click', handleClick);
+      canvas.removeEventListener('mousedown', handleClick);
+      canvas.removeEventListener('mouseup', handleClick);
+      canvas.removeEventListener('mousemove', handleMouseMove);
       cancelAnimationFrame(frameId);
       renderer.dispose();
       combinedTexture.dispose();
@@ -435,7 +456,23 @@ const Overlay = () => {
     };
   }, []);
 
-  return <div ref={containerRef} style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "auto" }} />;
+  return (
+    <div 
+      ref={containerRef} 
+      style={{ 
+        position: "fixed", 
+        top: 0, 
+        left: 0, 
+        width: "100%", 
+        height: "100%", 
+        pointerEvents: "auto",
+        backgroundColor: "black", // Black letterboxing for non-16:9 screens
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center"
+      }} 
+    />
+  );
 };
 
 export default Overlay;
