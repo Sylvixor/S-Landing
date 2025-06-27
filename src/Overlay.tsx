@@ -64,7 +64,7 @@ const Overlay = () => {
     videoTexture.magFilter = THREE.LinearFilter;
     videoTexture.generateMipmaps = false;
 
-    const createCombinedCanvasTexture = (isHovered: boolean = false, hoverProgress: number = 0): THREE.CanvasTexture => {
+    const createCombinedCanvasTexture = (hoveredButton: string | null, homebrewHoverProgress: number, toolsHoverProgress: number): THREE.CanvasTexture => {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
       if (!ctx) return new THREE.CanvasTexture(canvas);
@@ -111,11 +111,10 @@ const Overlay = () => {
       const btnY = buttonY - paddingY / 2;
       const radius = 6;
 
-      // Button background with fill animation
-      const fillAlpha = 0.2 + (0.8 * hoverProgress); // Fill more when hovered
-      
-      // Draw button background (fills up on hover)
-      ctx.fillStyle = `rgba(100, 100, 120, ${fillAlpha})`;
+      // Homebrew button rendering
+      ctx.save(); // Save current canvas state
+      const homebrewFillAlpha = 0.2 + (0.8 * homebrewHoverProgress);
+      ctx.fillStyle = `rgba(100, 100, 120, ${homebrewFillAlpha})`;
       ctx.beginPath();
       ctx.moveTo(btnX + radius, btnY);
       ctx.lineTo(btnX + btnWidth - radius, btnY);
@@ -129,38 +128,77 @@ const Overlay = () => {
       ctx.closePath();
       ctx.fill();
 
-      // Button border (always visible)
       ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Button text with conditional shadow/stroke and inversion animation
-      // Remove shadow and stroke when hovering (when hoverProgress > 0.1)
-      if (hoverProgress < 0.1) {
+      if (homebrewHoverProgress < 0.1) {
         ctx.shadowColor = "rgba(0,0,0,0.85)";
         ctx.shadowBlur = 6;
         ctx.lineWidth = 3;
         ctx.strokeStyle = "black";
       } else {
-        // Clear shadow and stroke for hovered state
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
         ctx.lineWidth = 0;
       }
-      
-      // Invert text color based on hover progress
-      // Normal: white text, Hover: black text (inverted)
-      const textR = 255 - (255 * hoverProgress);
-      const textG = 255 - (255 * hoverProgress);
-      const textB = 255 - (255 * hoverProgress);
-      
-      ctx.fillStyle = `rgb(${textR}, ${textG}, ${textB})`;
-      
-      // Only apply stroke if not hovered
-      if (hoverProgress < 0.1) {
+      const homebrewTextR = 255 - (255 * homebrewHoverProgress);
+      const homebrewTextG = 255 - (255 * homebrewHoverProgress);
+      const homebrewTextB = 255 - (255 * homebrewHoverProgress);
+      ctx.fillStyle = `rgb(${homebrewTextR}, ${homebrewTextG}, ${homebrewTextB})`;
+      if (homebrewHoverProgress < 0.1) {
         ctx.strokeText(buttonText, buttonX, buttonY);
       }
       ctx.fillText(buttonText, buttonX, buttonY);
+      ctx.restore(); // Restore canvas state
+
+      // Second button (tools) rendering
+      ctx.save(); // Save current canvas state
+      const buttonText2 = "tools";
+      const buttonY2 = buttonY + btnHeight + 20; // Position below the first button
+
+      const btnWidth2 = ctx.measureText(buttonText2).width + paddingX * 2;
+      const btnX2 = buttonX - paddingX;
+      const btnY2 = buttonY2 - paddingY / 2;
+
+      const toolsFillAlpha = 0.2 + (0.8 * toolsHoverProgress);
+      ctx.fillStyle = `rgba(100, 100, 120, ${toolsFillAlpha})`;
+      ctx.beginPath();
+      ctx.moveTo(btnX2 + radius, btnY2);
+      ctx.lineTo(btnX2 + btnWidth2 - radius, btnY2);
+      ctx.quadraticCurveTo(btnX2 + btnWidth2, btnY2, btnX2 + btnWidth2, btnY2 + radius);
+      ctx.lineTo(btnX2 + btnWidth2, btnY2 + btnHeight - radius);
+      ctx.quadraticCurveTo(btnX2 + btnWidth2, btnY2 + btnHeight, btnX2 + btnWidth2 - radius, btnY2 + btnHeight);
+      ctx.lineTo(btnX2 + radius, btnY2 + btnHeight);
+      ctx.quadraticCurveTo(btnX2, btnY2 + btnHeight, btnX2, btnY2 + btnHeight - radius);
+      ctx.lineTo(btnX2, btnY2 + radius);
+      ctx.quadraticCurveTo(btnX2, btnY2, btnX2 + radius, btnY2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      if (toolsHoverProgress < 0.1) {
+        ctx.shadowColor = "rgba(0,0,0,0.85)";
+        ctx.shadowBlur = 6;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "black";
+      } else {
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+        ctx.lineWidth = 0;
+      }
+      const toolsTextR = 255 - (255 * toolsHoverProgress);
+      const toolsTextG = 255 - (255 * toolsHoverProgress);
+      const toolsTextB = 255 - (255 * toolsHoverProgress);
+      ctx.fillStyle = `rgb(${toolsTextR}, ${toolsTextG}, ${toolsTextB})`;
+      if (toolsHoverProgress < 0.1) {
+        ctx.strokeText(buttonText2, buttonX, buttonY2);
+      }
+      ctx.fillText(buttonText2, buttonX, buttonY2);
+      ctx.restore(); // Restore canvas state
 
       // Credit text (restore shadow/stroke for credit text)
       ctx.font = "bold 45px 'Courier New', Courier, monospace";
@@ -187,10 +225,12 @@ const Overlay = () => {
       return texture;
     };
 
-    let combinedTexture: THREE.CanvasTexture = createCombinedCanvasTexture();
-    let isHovered = false;
-    let hoverProgress = 0;
-    let targetHoverProgress = 0;
+    let combinedTexture: THREE.CanvasTexture = createCombinedCanvasTexture(null, 0, 0);
+    let hoveredButton: string | null = null;
+    let homebrewHoverProgress = 0;
+    let toolsHoverProgress = 0;
+    let targetHomebrewHoverProgress = 0;
+    let targetToolsHoverProgress = 0;
 
     const geometry = new THREE.PlaneGeometry(2, 2);
 
@@ -351,19 +391,60 @@ const Overlay = () => {
 
     // Check if point is within button bounds (with curve)
     const isInButtonBounds = (canvasX: number, canvasY: number) => {
-      const buttonStartX = 160;
-      const buttonStartY = 170; 
-      const buttonWidth = 185;
-      const buttonHeight = 50;
-      
-      if (canvasX >= buttonStartX && canvasX <= buttonStartX + buttonWidth) {
-        const progressAcrossButton = (canvasX - buttonStartX) / buttonWidth;
-        const curveFactor = -15;
-        const curvedY = buttonStartY + (curveFactor * progressAcrossButton);
-        
-        return canvasY >= curvedY && canvasY <= curvedY + buttonHeight;
+      const visualPaddingX = 16; // This is the visual padding for the button
+      const clickableAreaHorizontalPadding = 0; // New variable for clickable area horizontal padding
+      const paddingY = 6;
+      const btnHeight = 50; // Fixed height for both buttons
+      const radius = 6; // Button corner radius
+
+      // Create a temporary canvas context to measure text widths
+      const tempCanvas = document.createElement("canvas");
+      const tempCtx = tempCanvas.getContext("2d");
+      if (!tempCtx) return null;
+      tempCtx.font = "bold 40px 'Courier New', Courier, monospace"; // Must match the font used in createCombinedCanvasTexture
+
+      const buttonTextHomebrew = "homebrew";
+      const buttonTextTools = "tools";
+
+      // Clickable area base coordinates (independent of visual button position)
+      const clickableButtonX = 160; // Current value
+      const clickableButtonY = 170; // Current value
+      const toolsClickableAreaXOffset = 10; // New offset for tools button clickable area
+
+      // Homebrew button dimensions and position for clickable area
+      const homebrewClickableAreaXOffset = 13; // New offset for homebrew button clickable area
+      const btnWidthHomebrew = tempCtx.measureText(buttonTextHomebrew).width + clickableAreaHorizontalPadding * 2 - 14; // Adjusted for homebrew
+      const homebrewBtnX = clickableButtonX - clickableAreaHorizontalPadding + homebrewClickableAreaXOffset;
+      const homebrewBtnY = clickableButtonY - paddingY / 2;
+
+      // Tools button dimensions and position for clickable area
+      const toolsClickableAreaYOffset = -5; // New offset for tools button clickable area
+      const buttonY2Offset = btnHeight + 20; // Offset for the second button
+      const btnWidthTools = tempCtx.measureText(buttonTextTools).width + clickableAreaHorizontalPadding * 2;
+      const toolsBtnX = clickableButtonX - clickableAreaHorizontalPadding + toolsClickableAreaXOffset;
+      const toolsBtnY = clickableButtonY + buttonY2Offset - paddingY / 2 + toolsClickableAreaYOffset;
+
+      const curveFactor = -15; // Re-introducing the curve factor
+
+      // Check homebrew button
+      if (canvasX >= homebrewBtnX && canvasX <= homebrewBtnX + btnWidthHomebrew) {
+        const progressAcrossButton = (canvasX - homebrewBtnX) / btnWidthHomebrew;
+        const curvedY = homebrewBtnY + (curveFactor * progressAcrossButton);
+        if (canvasY >= curvedY && canvasY <= curvedY + btnHeight) {
+          return "homebrew";
+        }
       }
-      return false;
+
+      // Check tools button
+      if (canvasX >= toolsBtnX && canvasX <= toolsBtnX + btnWidthTools) {
+        const progressAcrossButton = (canvasX - toolsBtnX) / btnWidthTools;
+        const curvedY = toolsBtnY + (curveFactor * progressAcrossButton);
+        if (canvasY >= curvedY && canvasY <= curvedY + btnHeight) {
+          return "tools";
+        }
+      }
+
+      return null;
     };
 
     // Enhanced click handler with better Opera GX compatibility
@@ -374,11 +455,16 @@ const Overlay = () => {
       
       const { x: canvasX, y: canvasY } = screenToCanvasCoords(event.clientX, event.clientY);
       
-      if (isInButtonBounds(canvasX, canvasY)) {
-        console.log('Button clicked!', { canvasX, canvasY });
-        // Use a more compatible method for opening links
+      const clickedButton = isInButtonBounds(canvasX, canvasY);
+
+      if (clickedButton) {
+        console.log(`${clickedButton} button clicked!`, { canvasX, canvasY });
         const link = document.createElement('a');
-        link.href = 'https://homebrew.sylvixor.com';
+        if (clickedButton === "homebrew") {
+          link.href = 'https://homebrew.sylvixor.com';
+        } else if (clickedButton === "tools") {
+          link.href = 'https://tools.sylvixor.com';
+        }
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
         document.body.appendChild(link);
@@ -388,14 +474,18 @@ const Overlay = () => {
     };
 
     // Mouse move handler for hover effects
+    // Mouse move handler for hover effects
     const handleMouseMove = (event: MouseEvent) => {
       const { x: canvasX, y: canvasY } = screenToCanvasCoords(event.clientX, event.clientY);
-      const inBounds = isInButtonBounds(canvasX, canvasY);
+      const currentHoveredButton = isInButtonBounds(canvasX, canvasY);
       
-      if (inBounds !== isHovered) {
-        isHovered = inBounds;
-        targetHoverProgress = isHovered ? 1 : 0;
-        renderer.domElement.style.cursor = isHovered ? 'pointer' : 'default';
+      if (currentHoveredButton !== hoveredButton) {
+        hoveredButton = currentHoveredButton;
+
+        targetHomebrewHoverProgress = (hoveredButton === "homebrew") ? 1 : 0;
+        targetToolsHoverProgress = (hoveredButton === "tools") ? 1 : 0;
+
+        renderer.domElement.style.cursor = hoveredButton ? 'pointer' : 'default';
       }
     };
 
@@ -421,12 +511,14 @@ const Overlay = () => {
 
       // Smooth hover animation
       const lerpSpeed = 0.1;
-      hoverProgress += (targetHoverProgress - hoverProgress) * lerpSpeed;
+      homebrewHoverProgress += (targetHomebrewHoverProgress - homebrewHoverProgress) * lerpSpeed;
+      toolsHoverProgress += (targetToolsHoverProgress - toolsHoverProgress) * lerpSpeed;
       
-      // Update texture if hover progress changed significantly
-      if (Math.abs(hoverProgress - (isHovered ? 1 : 0)) > 0.01) {
+      // Update texture if hover progress changed significantly for either button
+      if (Math.abs(homebrewHoverProgress - targetHomebrewHoverProgress) > 0.01 ||
+          Math.abs(toolsHoverProgress - targetToolsHoverProgress) > 0.01) {
         combinedTexture.dispose();
-        combinedTexture = createCombinedCanvasTexture(isHovered, hoverProgress);
+        combinedTexture = createCombinedCanvasTexture(hoveredButton, homebrewHoverProgress, toolsHoverProgress);
         material.uniforms.u_combinedTexture.value = combinedTexture;
         material.uniforms.u_combinedTexture.value.needsUpdate = true;
       }
