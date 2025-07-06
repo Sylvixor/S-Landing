@@ -76,6 +76,7 @@ S-Landing/
 |   ├── events.ts
 |   ├── main.tsx
 |   ├── Scene.tsx
+|   ├── Mobile.tsx
 │   └── UI.tsx
 ├── style.css
 ├── tsconfig.json
@@ -89,6 +90,7 @@ S-Landing/
     -   `events.ts`: Manages user interactions.
     -   `main.tsx`: Entry point for the React application.
     -   `Scene.tsx`: Handles environment.
+    -   `Mobile.tsx`: Mobile website.
     -   `UI.tsx`: User interface.
 -   `public/`: Static assets.
     -   `BG.mp4`: Background video.
